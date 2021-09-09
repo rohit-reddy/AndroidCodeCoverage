@@ -1,0 +1,65 @@
+def coveredProject = subprojects.findAll {it.name == "app"}
+apply plugin: 'jacoco'
+configure(coveredProject) { prj ->
+        apply plugin: 'jacoco'
+        jacoco {
+            toolVersion = "$jacocoVersion"
+        }
+
+        task jacocoTestReport(type: JacocoReport) {
+
+            reports {
+                xml.enabled = true
+                html.enabled = true
+            }
+
+
+            def fileFilter = ['**/R.class', '**/R$*.class', '**/BuildConfig.*', '**/Manifest*.*', '**/*Test*.*', 'android/**/*.*']
+            def debugTree = fileTree(dir: "${prj.buildDir}/intermediates/javac", excludes: fileFilter)
+            def kotlinDebugTree = fileTree(dir: "${prj.buildDir}/tmp/kotlin-classes", excludes: fileFilter)
+            def mainSrc = "${project.projectDir}/src/main/java"
+
+
+            println("project.buildDir is ------>$project.buildDir" + prj)
+            println("project.projectDir is ------->$project.projectDir")
+            println("rootProject.rootDir is ------->$rootProject.rootDir")
+
+            sourceDirectories.setFrom files([mainSrc])
+            classDirectories.setFrom files([debugTree], [kotlinDebugTree])
+            additionalSourceDirs.setFrom files([mainSrc])
+
+            executionData.setFrom fileTree("$rootProject.rootDir", {
+                includes = ['**/*.ec']
+            })
+        }
+}
+
+
+/**
+ *  Root task that generates an aggregated Jacoco test coverage report for all sub-projects
+ */
+task jacocoRootReport(type: JacocoReport, group: 'Coverage reports') {
+    group = 'Reporting'
+    description = 'Generates an aggregate report from all subprojects'
+    tasks.withType(Test) {
+        ignoreFailures true
+    }
+    def projects = coveredProject
+    //noinspection GrUnresolvedAccess
+    dependsOn(projects.jacocoTestReport)
+    final source = files(projects.jacocoTestReport.sourceDirectories)
+    additionalSourceDirs.setFrom source
+    sourceDirectories.setFrom source
+    classDirectories.setFrom files(projects.jacocoTestReport.classDirectories)
+    executionData.setFrom files(projects.jacocoTestReport.executionData)
+    reports {
+        xml.enabled = true
+        html.enabled = true
+        html.destination file("${rootProject.rootDir}/jacocoReport")
+        xml.destination file("${rootProject.rootDir}/jacocoReport/report.xml")
+    }
+    doFirst {
+        //noinspection GroovyAssignabilityCheck
+        executionData.setFrom files(executionData.findAll { it.exists() })
+    }
+}
